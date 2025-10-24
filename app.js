@@ -140,18 +140,12 @@ class AviatorBankrollApp {
             return;
         }
 
-        // Ensure new capital is not less than previous (no negative gains for now)
-        if (newTotalCapital < this.planData.currentCapital) {
-            this.showStatus('error', '⚠️ Le nouveau capital ne peut pas être inférieur au capital actuel');
-            return;
-        }
-
         const previousCapital = this.planData.currentCapital;
-        const dailyGain = newTotalCapital - previousCapital;
+        const dailyChange = newTotalCapital - previousCapital; // Peut être négatif (perte)
 
         // Add to history
         const entry = {
-            dailyGain: dailyGain,
+            dailyGain: dailyChange, // Renommé mais garde la même structure
             capitalBefore: previousCapital,
             capitalAfter: newTotalCapital,
             date: new Date().toISOString()
@@ -168,20 +162,32 @@ class AviatorBankrollApp {
         const difference = newTotalCapital - theoreticalCapital;
 
         let statusType = 'success';
-        let statusMessage = `✅ Capital mis à jour! Gain du jour: +${this.formatMoney(dailyGain)}`;
+        let statusMessage;
         
-        if (difference > 0) {
-            statusMessage += ` (En avance de ${this.formatMoney(difference)})`;
-            statusType = 'success';
-        } else if (difference < 0) {
-            statusMessage += ` (En retard de ${this.formatMoney(Math.abs(difference))})`;
+        if (dailyChange >= 0) {
+            statusMessage = `✅ Capital mis à jour! Gain du jour: +${this.formatMoney(dailyChange)}`;
+        } else {
+            statusMessage = `📉 Capital mis à jour! Perte du jour: ${this.formatMoney(dailyChange)}`;
             statusType = 'warning';
         }
-
-        // Check if target reached
+        
+        // Add progression context
         if (newTotalCapital >= this.planData.targetCapital) {
-            statusMessage += '\n🎉 OBJECTIF ATTEINT! Félicitations!';
+            statusMessage += '\n🎉 OBJECTIF FINAL ATTEINT! Félicitations!';
             statusType = 'success';
+            
+            const daysRemaining = Math.max(0, this.planData.durationDays - daysElapsed);
+            if (daysRemaining > 0) {
+                statusMessage += `\nVous avez ${daysRemaining} jour(s) d'avance!`;
+            }
+        } else {
+            if (difference > 0) {
+                statusMessage += ` (En avance de ${this.formatMoney(difference)})`;
+                statusType = dailyChange >= 0 ? 'success' : 'warning';
+            } else if (difference < 0) {
+                statusMessage += ` (En retard de ${this.formatMoney(Math.abs(difference))})`;
+                statusType = 'warning';
+            }
         }
 
         this.showStatus(statusType, statusMessage);
@@ -243,29 +249,59 @@ class AviatorBankrollApp {
         const daysElapsed = this.planData.history.length;
         const daysRemaining = Math.max(0, this.planData.durationDays - daysElapsed);
         
-        // Calculate daily goal based on current capital
-        const remainingGrowth = this.planData.targetCapital / this.planData.currentCapital;
-        const adjustedDailyRate = daysRemaining > 0 
-            ? (Math.pow(remainingGrowth, 1 / daysRemaining) - 1) * 100 
-            : 0;
-        const dailyGoal = this.planData.currentCapital * (adjustedDailyRate / 100);
+        let dailyGoal = 0;
+        let adjustedDailyRate = 0;
+        
+        if (daysRemaining > 0) {
+            // Calculate how much growth is still needed
+            const remainingGrowth = this.planData.targetCapital / this.planData.currentCapital;
+            
+            if (remainingGrowth > 1) {
+                // Still need to grow
+                adjustedDailyRate = (Math.pow(remainingGrowth, 1 / daysRemaining) - 1) * 100;
+                dailyGoal = this.planData.currentCapital * (adjustedDailyRate / 100);
+            } else {
+                // Target already reached or exceeded
+                adjustedDailyRate = 0;
+                dailyGoal = 0;
+            }
+        }
 
         // Calculate progress percentage
         const totalGain = this.planData.currentCapital - this.planData.initialCapital;
         const targetGain = this.planData.targetCapital - this.planData.initialCapital;
-        const progressPercent = (totalGain / targetGain) * 100;
+        const progressPercent = Math.min(100, (totalGain / targetGain) * 100);
 
         document.getElementById('info-initial-capital').textContent = this.formatMoney(this.planData.initialCapital);
         document.getElementById('info-current-capital').textContent = this.formatMoney(this.planData.currentCapital);
         document.getElementById('info-target-capital').textContent = this.formatMoney(this.planData.targetCapital);
         document.getElementById('info-daily-rate').textContent = this.planData.dailyRate.toFixed(2) + '%';
-        document.getElementById('info-daily-goal').textContent = this.formatMoney(dailyGoal);
+        
+        // Display daily goal or "Objectif atteint" message
+        if (dailyGoal > 0) {
+            document.getElementById('info-daily-goal').textContent = this.formatMoney(dailyGoal);
+            document.getElementById('info-daily-goal').className = 'text-blue-400 font-semibold';
+        } else if (this.planData.currentCapital >= this.planData.targetCapital) {
+            document.getElementById('info-daily-goal').textContent = 'Objectif atteint! 🎉';
+            document.getElementById('info-daily-goal').className = 'text-green-400 font-semibold';
+        } else {
+            document.getElementById('info-daily-goal').textContent = 'Maintenir le capital';
+            document.getElementById('info-daily-goal').className = 'text-yellow-400 font-semibold';
+        }
+        
         document.getElementById('info-days-remaining').textContent = daysRemaining + ' / ' + this.planData.durationDays;
         document.getElementById('info-progress').textContent = progressPercent.toFixed(1) + '%';
 
         // Update progress bar
         const progressFill = document.getElementById('progress-fill');
-        progressFill.style.width = Math.min(100, progressPercent) + '%';
+        progressFill.style.width = progressPercent + '%';
+        
+        // Change progress bar color if target exceeded
+        if (progressPercent >= 100) {
+            progressFill.className = 'bg-green-500 h-full rounded-full transition-all';
+        } else {
+            progressFill.className = 'bg-blue-600 h-full rounded-full transition-all';
+        }
     }
 
     /**
@@ -298,7 +334,10 @@ class AviatorBankrollApp {
             historyItem.className = 'history-item';
             
             // Handle both old format (amount) and new format (dailyGain)
-            const gainAmount = entry.dailyGain !== undefined ? entry.dailyGain : (entry.amount > 0 ? entry.amount : 0);
+            const changeAmount = entry.dailyGain !== undefined ? entry.dailyGain : (entry.amount || 0);
+            const isPositive = changeAmount >= 0;
+            const amountClass = isPositive ? 'positive' : 'negative';
+            const amountSign = isPositive ? '+' : '';
             
             historyItem.innerHTML = `
                 <div>
@@ -307,8 +346,8 @@ class AviatorBankrollApp {
                         Capital: ${this.formatMoney(entry.capitalBefore)} → ${this.formatMoney(entry.capitalAfter)}
                     </div>
                 </div>
-                <div class="history-amount positive">
-                    +${this.formatMoney(gainAmount)}
+                <div class="history-amount ${amountClass}">
+                    ${amountSign}${this.formatMoney(Math.abs(changeAmount))}
                 </div>
             `;
             

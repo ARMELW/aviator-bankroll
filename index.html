@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 min-h-screen  flex items-center justify-center p-4">
-        <div class="w-full max-w-3xl">
+        <div class="w-full max-w-xl">
         <header class="text-center mb-6">
             <div class="text-4xl mb-2">✈️</div>
             <h1 class="text-xl font-bold text-white">Aviator Bankroll</h1>
@@ -100,7 +100,6 @@
                                 type="number" 
                                 id="daily-amount" 
                                 step="1" 
-                                min="0"
                                 required 
                                 placeholder="8618"
                                 class="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded text-sm focus:outline-none focus:border-blue-500"
@@ -127,12 +126,6 @@
                 </button>
             </section>
             
-            <!-- Historique simple (caché) -->
-            <section class="bg-slate-800 rounded-lg p-3 border border-slate-700 hidden" id="history-section">
-                <h3 class="text-sm font-semibold text-white mb-2">Historique</h3>
-                <div id="history-list" class="space-y-1 max-h-32 overflow-y-auto text-xs"></div>
-            </section>
-        </div>
             <!-- Historique simple (caché) -->
             <section class="bg-slate-800 rounded-lg p-3 border border-slate-700 hidden" id="history-section">
                 <h3 class="text-sm font-semibold text-white mb-2">Historique</h3>
