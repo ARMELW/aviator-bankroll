@@ -5,7 +5,11 @@ import { ChartManager } from './chart.js';
 class AviatorBankrollApp {
     constructor() {
         this.db = new IndexedDBManager();
-        this.chartManager = new ChartManager('capital-chart');
+        
+        // Check if chart canvas exists before creating ChartManager
+        const chartCanvas = document.getElementById('capital-chart');
+        this.chartManager = chartCanvas ? new ChartManager('capital-chart') : null;
+        
         this.planData = null;
         
         // DOM elements
@@ -24,17 +28,27 @@ class AviatorBankrollApp {
     }
 
     /**
+     * Format amount with thousands separator
+     */
+    formatMoney(amount) {
+        return new Intl.NumberFormat('fr-FR').format(Math.round(amount)) + ' Ar';
+    }
+
+    /**
      * Initialize the application
      */
     async init() {
         try {
+            console.log('Initializing Aviator Bankroll App...');
             await this.db.init();
             await this.loadPlanData();
             this.setupEventListeners();
             
             if (this.planData) {
+                console.log('Existing plan found, showing plan view');
                 this.showPlanView();
             } else {
+                console.log('No existing plan, showing config view');
                 this.showConfigView();
             }
         } catch (error) {
@@ -56,7 +70,21 @@ class AviatorBankrollApp {
      * Load plan data from database
      */
     async loadPlanData() {
-        this.planData = await this.db.getPlanData();
+        try {
+            const data = await this.db.getPlanData();
+            
+            // Check if we have valid plan data
+            if (data && data.initialCapital && data.targetCapital && data.durationDays) {
+                this.planData = data;
+                console.log('Plan data loaded:', this.planData);
+            } else {
+                this.planData = null;
+                console.log('No valid plan data found');
+            }
+        } catch (error) {
+            console.error('Error loading plan data:', error);
+            this.planData = null;
+        }
     }
 
     /**
@@ -68,7 +96,6 @@ class AviatorBankrollApp {
         const initialCapital = parseFloat(document.getElementById('initial-capital').value);
         const targetCapital = parseFloat(document.getElementById('target-capital').value);
         const durationDays = parseInt(document.getElementById('duration-days').value);
-        const stopLoss = parseFloat(document.getElementById('stop-loss').value);
 
         if (targetCapital <= initialCapital) {
             alert('L\'objectif final doit être supérieur au capital initial');
@@ -83,15 +110,20 @@ class AviatorBankrollApp {
             initialCapital,
             targetCapital,
             durationDays,
-            stopLoss,
             dailyRate,
             currentCapital: initialCapital,
             history: [],
             startDate: new Date().toISOString()
         };
 
-        await this.db.savePlanData(this.planData);
-        this.showPlanView();
+        try {
+            await this.db.savePlanData(this.planData);
+            console.log('Plan data saved:', this.planData);
+            this.showPlanView();
+        } catch (error) {
+            console.error('Error saving plan data:', error);
+            alert('Erreur lors de la sauvegarde du plan');
+        }
     }
 
     /**
@@ -100,45 +132,54 @@ class AviatorBankrollApp {
     async handleDailySubmit(e) {
         e.preventDefault();
         
-        const amount = parseFloat(document.getElementById('daily-amount').value);
-        const newCapital = this.planData.currentCapital + amount;
-
-        // Check stop loss
-        if (amount < 0 && Math.abs(amount) > this.planData.stopLoss) {
-            this.showStatus('error', `⚠️ STOP LOSS DÉPASSÉ! Perte de ${Math.abs(amount).toFixed(2)}€ > ${this.planData.stopLoss.toFixed(2)}€`);
+        const newTotalCapital = parseFloat(document.getElementById('daily-amount').value);
+        
+        // Ensure capital is positive
+        if (newTotalCapital < 0) {
+            this.showStatus('error', '⚠️ Veuillez saisir un capital positif');
+            return;
         }
+
+        // Ensure new capital is not less than previous (no negative gains for now)
+        if (newTotalCapital < this.planData.currentCapital) {
+            this.showStatus('error', '⚠️ Le nouveau capital ne peut pas être inférieur au capital actuel');
+            return;
+        }
+
+        const previousCapital = this.planData.currentCapital;
+        const dailyGain = newTotalCapital - previousCapital;
 
         // Add to history
         const entry = {
-            amount,
-            capitalBefore: this.planData.currentCapital,
-            capitalAfter: newCapital,
+            dailyGain: dailyGain,
+            capitalBefore: previousCapital,
+            capitalAfter: newTotalCapital,
             date: new Date().toISOString()
         };
 
         this.planData.history.push(entry);
-        this.planData.currentCapital = newCapital;
+        this.planData.currentCapital = newTotalCapital;
 
         await this.db.savePlanData(this.planData);
         
-        // Calculate if ahead or behind
+        // Calculate if ahead or behind theoretical progression
         const daysElapsed = this.planData.history.length;
         const theoreticalCapital = this.planData.initialCapital * Math.pow(1 + this.planData.dailyRate / 100, daysElapsed);
-        const difference = newCapital - theoreticalCapital;
+        const difference = newTotalCapital - theoreticalCapital;
 
         let statusType = 'success';
-        let statusMessage = `✅ Enregistré! Capital actuel: ${newCapital.toFixed(2)}€`;
+        let statusMessage = `✅ Capital mis à jour! Gain du jour: +${this.formatMoney(dailyGain)}`;
         
         if (difference > 0) {
-            statusMessage += ` (En avance de ${difference.toFixed(2)}€)`;
+            statusMessage += ` (En avance de ${this.formatMoney(difference)})`;
             statusType = 'success';
         } else if (difference < 0) {
-            statusMessage += ` (En retard de ${Math.abs(difference).toFixed(2)}€)`;
+            statusMessage += ` (En retard de ${this.formatMoney(Math.abs(difference))})`;
             statusType = 'warning';
         }
 
         // Check if target reached
-        if (newCapital >= this.planData.targetCapital) {
+        if (newTotalCapital >= this.planData.targetCapital) {
             statusMessage += '\n🎉 OBJECTIF ATTEINT! Félicitations!';
             statusType = 'success';
         }
@@ -150,8 +191,12 @@ class AviatorBankrollApp {
         
         // Update display
         this.updatePlanInfo();
-        this.updateChart();
-        this.updateHistory();
+        if (this.chartManager) {
+            this.updateChart();
+        }
+        if (this.elements.historySection) {
+            this.updateHistory();
+        }
     }
 
     /**
@@ -170,10 +215,7 @@ class AviatorBankrollApp {
      */
     showConfigView() {
         this.elements.configSection.style.display = 'block';
-        this.elements.planInfo.style.display = 'none';
-        this.elements.dailyEntry.style.display = 'none';
-        this.elements.chartSection.style.display = 'none';
-        this.elements.historySection.style.display = 'none';
+        document.getElementById('main-grid').style.display = 'none';
         this.elements.actionsSection.style.display = 'none';
     }
 
@@ -182,15 +224,16 @@ class AviatorBankrollApp {
      */
     showPlanView() {
         this.elements.configSection.style.display = 'none';
-        this.elements.planInfo.style.display = 'block';
-        this.elements.dailyEntry.style.display = 'block';
-        this.elements.chartSection.style.display = 'block';
-        this.elements.historySection.style.display = 'block';
+        document.getElementById('main-grid').style.display = 'grid';
         this.elements.actionsSection.style.display = 'block';
 
         this.updatePlanInfo();
-        this.updateChart();
-        this.updateHistory();
+        if (this.chartManager) {
+            this.updateChart();
+        }
+        if (this.elements.historySection) {
+            this.updateHistory();
+        }
     }
 
     /**
@@ -212,14 +255,13 @@ class AviatorBankrollApp {
         const targetGain = this.planData.targetCapital - this.planData.initialCapital;
         const progressPercent = (totalGain / targetGain) * 100;
 
-        document.getElementById('info-initial-capital').textContent = this.planData.initialCapital.toFixed(2) + '€';
-        document.getElementById('info-current-capital').textContent = this.planData.currentCapital.toFixed(2) + '€';
-        document.getElementById('info-target-capital').textContent = this.planData.targetCapital.toFixed(2) + '€';
+        document.getElementById('info-initial-capital').textContent = this.formatMoney(this.planData.initialCapital);
+        document.getElementById('info-current-capital').textContent = this.formatMoney(this.planData.currentCapital);
+        document.getElementById('info-target-capital').textContent = this.formatMoney(this.planData.targetCapital);
         document.getElementById('info-daily-rate').textContent = this.planData.dailyRate.toFixed(2) + '%';
-        document.getElementById('info-daily-goal').textContent = dailyGoal.toFixed(2) + '€';
+        document.getElementById('info-daily-goal').textContent = this.formatMoney(dailyGoal);
         document.getElementById('info-days-remaining').textContent = daysRemaining + ' / ' + this.planData.durationDays;
         document.getElementById('info-progress').textContent = progressPercent.toFixed(1) + '%';
-        document.getElementById('info-stop-loss').textContent = this.planData.stopLoss.toFixed(2) + '€';
 
         // Update progress bar
         const progressFill = document.getElementById('progress-fill');
@@ -255,18 +297,18 @@ class AviatorBankrollApp {
             const historyItem = document.createElement('div');
             historyItem.className = 'history-item';
             
-            const amountClass = entry.amount >= 0 ? 'positive' : 'negative';
-            const amountSign = entry.amount >= 0 ? '+' : '';
+            // Handle both old format (amount) and new format (dailyGain)
+            const gainAmount = entry.dailyGain !== undefined ? entry.dailyGain : (entry.amount > 0 ? entry.amount : 0);
             
             historyItem.innerHTML = `
                 <div>
                     <div class="history-date">Jour ${dayNumber} - ${date.toLocaleDateString('fr-FR')}</div>
                     <div class="history-details">
-                        Capital: ${entry.capitalBefore.toFixed(2)}€ → ${entry.capitalAfter.toFixed(2)}€
+                        Capital: ${this.formatMoney(entry.capitalBefore)} → ${this.formatMoney(entry.capitalAfter)}
                     </div>
                 </div>
-                <div class="history-amount ${amountClass}">
-                    ${amountSign}${entry.amount.toFixed(2)}€
+                <div class="history-amount positive">
+                    +${this.formatMoney(gainAmount)}
                 </div>
             `;
             
