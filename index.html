@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aviator Bankroll Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>✈️ Aviator Bankroll Manager</h1>
+            <p>Gérez votre capital et suivez votre progression</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Configuration du plan -->
+            <section class="card" id="config-section">
+                <h2>⚙️ Configuration du Plan</h2>
+                <form id="config-form">
+                    <div class="form-group">
+                        <label for="initial-capital">Capital Initial (€)</label>
+                        <input type="number" id="initial-capital" min="0" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="target-capital">Objectif Final (€)</label>
+                        <input type="number" id="target-capital" min="0" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="duration-days">Durée du Plan (jours)</label>
+                        <input type="number" id="duration-days" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="stop-loss">Seuil de Perte Journalier (€)</label>
+                        <input type="number" id="stop-loss" min="0" step="0.01" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Démarrer le Plan</button>
+                </form>
+            </section>
+
+            <!-- Informations du plan actuel -->
+            <section class="card" id="plan-info" style="display: none;">
+                <h2>📊 Plan Actuel</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Capital Initial:</span>
+                        <span class="info-value" id="info-initial-capital">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Capital Actuel:</span>
+                        <span class="info-value highlight" id="info-current-capital">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Objectif Final:</span>
+                        <span class="info-value" id="info-target-capital">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Taux de Croissance Journalier:</span>
+                        <span class="info-value" id="info-daily-rate">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Objectif Quotidien:</span>
+                        <span class="info-value highlight" id="info-daily-goal">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Jours Restants:</span>
+                        <span class="info-value" id="info-days-remaining">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Progression:</span>
+                        <span class="info-value" id="info-progress">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Stop Loss:</span>
+                        <span class="info-value" id="info-stop-loss">-</span>
+                    </div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </section>
+
+            <!-- Saisie du gain journalier -->
+            <section class="card" id="daily-entry" style="display: none;">
+                <h2>💰 Gain/Perte du Jour</h2>
+                <form id="daily-form">
+                    <div class="form-group">
+                        <label for="daily-amount">Montant (€) - Positif pour gain, négatif pour perte</label>
+                        <input type="number" id="daily-amount" step="0.01" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </form>
+                <div id="daily-status" class="status-message"></div>
+            </section>
+
+            <!-- Graphique -->
+            <section class="card" id="chart-section" style="display: none;">
+                <h2>📈 Évolution du Capital</h2>
+                <canvas id="capital-chart" width="800" height="400"></canvas>
+            </section>
+
+            <!-- Historique -->
+            <section class="card" id="history-section" style="display: none;">
+                <h2>📜 Historique</h2>
+                <div id="history-list"></div>
+            </section>
+
+            <!-- Actions -->
+            <section class="card actions" id="actions-section" style="display: none;">
+                <button id="reset-plan" class="btn btn-danger">🔄 Réinitialiser le Plan</button>
+            </section>
+        </div>
+    </div>
+
+    <script src="app.js" type="module"></script>
+</body>
+</html>
