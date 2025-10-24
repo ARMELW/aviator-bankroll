@@ -257,6 +257,7 @@ header p {
     font-weight: 700;
     font-size: 1.1em;
     border: 1px solid;
+    color: #ffffff;
     animation: fadeIn 0.5s ease;
     position: relative;
     overflow: hidden;
